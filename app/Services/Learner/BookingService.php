@@ -144,11 +144,12 @@ class BookingService
     }
 
     /**
-     * Memproses Pembayaran (Simulasi MVP)
+     * Memproses Pembayaran via Midtrans
      */
     public function payBooking($learnerId, $bookingId, $paymentMethod)
     {
-        $booking = Booking::where('learner_id', $learnerId)
+        $booking = Booking::with(['learner', 'tutor.user', 'course'])
+            ->where('learner_id', $learnerId)
             ->where('id', $bookingId)
             ->where('payment_status', 'unpaid')
             ->firstOrFail();
@@ -158,16 +159,24 @@ class BookingService
             throw new Exception("Batas waktu pembayaran telah habis. Pesanan otomatis dibatalkan.");
         }
 
-        // Generate Nomor VA palsu (Contoh: 8878 + Nomor HP acak / Timestamp)
-        $paymentCode = '8878' . rand(10000000, 99999999);
+        if ($paymentMethod === 'cash') {
+            $booking->update([
+                'payment_method' => 'cash',
+                'payment_code' => 'CASH-' . $booking->id,
+                'status' => 'accepted',
+            ]);
+        } else {
+            // Generate Midtrans Snap Token
+            $midtrans = new \App\Services\Payment\MidtransService();
+            $snapResponse = $midtrans->createSnapToken($booking);
 
-        $booking->update([
-            'payment_method' => $paymentMethod,
-            'payment_code' => $paymentCode
-            // Catatan: status pembayaran masih 'unpaid' sampai user transfer beneran
-        ]);
+            $booking->update([
+                'payment_method' => 'midtrans',
+                'payment_code' => $snapResponse['token'], // Simpan snap token di field payment_code
+            ]);
+        }
 
-        return $booking;
+        return $booking->load(['bookingSlots.masterSlot']);
     }
 
     /**

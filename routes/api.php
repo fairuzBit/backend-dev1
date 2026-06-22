@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\Admin\ModerationController;
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/auth/supabase-login', [AuthController::class, 'supabaseLogin']);
+Route::post('/payment/notification', [App\Http\Controllers\Api\Payment\MidtransNotificationController::class, 'handle']);
 
 use App\Http\Controllers\Api\MasterDataController;
 

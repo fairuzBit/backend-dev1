@@ -40,5 +40,12 @@ return [
         'anon_key' => env('SUPABASE_ANON_KEY'),
     ],
 
+    'midtrans' => [
+        'server_key' => env('MIDTRANS_SERVER_KEY'),
+        'client_key' => env('MIDTRANS_CLIENT_KEY'),
+        'is_production' => env('MIDTRANS_IS_PRODUCTION', false),
+        'merchant_id' => env('MIDTRANS_MERCHANT_ID'),
+    ],
+
 ];
 
