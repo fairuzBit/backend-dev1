@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\Admin\ModerationController;
 // ROUTE PUBLIK 
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/auth/supabase-login', [AuthController::class, 'supabaseLogin']);
 
 use App\Http\Controllers\Api\MasterDataController;
 
