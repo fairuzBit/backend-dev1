@@ -111,6 +111,10 @@ class AuthController extends Controller
         }
 
         $supabaseUrl = rtrim($supabaseUrl, '/');
+        if (str_ends_with($supabaseUrl, '/rest/v1')) {
+            $supabaseUrl = substr($supabaseUrl, 0, -8);
+        }
+        $supabaseUrl = rtrim($supabaseUrl, '/');
 
         // Panggil endpoint /auth/v1/user di Supabase untuk memvalidasi access token
         $response = Http::withHeaders([
