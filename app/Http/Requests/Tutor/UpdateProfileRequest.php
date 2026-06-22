@@ -15,7 +15,7 @@ class UpdateProfileRequest extends FormRequest
     {
         return [
             'name' => 'nullable|string|max:255',
-            'nim' => 'required|string|size:12|unique:users,nim,' . $this->user()->id,
+            'nim' => 'nullable|string|size:12|unique:users,nim,' . $this->user()->id,
             'phone' => 'nullable|string|max:20',
             'avatar' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
             'bio' => 'nullable|string',
