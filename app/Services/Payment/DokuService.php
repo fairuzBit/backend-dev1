@@ -54,17 +54,24 @@ class DokuService
         $callbackBase = config('services.doku.callback_url');
         $callbackUrl = rtrim($callbackBase, '/') . '/' . $booking->id;
 
+        $invoiceNumber = 'BOOKING-' . $booking->id . '-' . time();
         $payload = [
             'order' => [
                 'amount' => (int) $booking->grand_total,
-                'invoice_number' => 'BOOKING-' . $booking->id . '-' . time(),
+                'invoice_number' => $invoiceNumber,
+                'currency' => 'IDR',
                 'callback_url' => $callbackUrl,
                 'auto_redirect' => true,
             ],
+            'payment' => [
+                'payment_due_date' => 60,
+            ],
             'customer' => [
+                'id' => 'LEARNER-' . $booking->learner->id,
                 'name' => $booking->learner->name,
                 'email' => $booking->learner->email,
                 'phone' => $booking->learner->phone ?? '',
+                'country' => 'ID',
             ]
         ];
 
@@ -106,14 +113,17 @@ class DokuService
                 return [
                     'payment' => [
                         'url' => $callbackUrl
-                    ]
+                    ],
+                    'invoice_number' => $invoiceNumber
                 ];
             }
 
             throw new \Exception('Gagal menghubungi gateway pembayaran DOKU: ' . ($response->json('error_message') ?? 'Unknown Error'));
         }
 
-        return $response->json();
+        $resData = $response->json();
+        $resData['invoice_number'] = $invoiceNumber;
+        return $resData;
     }
 
     /**
@@ -143,5 +153,64 @@ class DokuService
         $expectedSignature = base64_encode(hash_hmac('sha256', $signatureString, $this->secretKey, true));
 
         return hash_equals($expectedSignature, $signature);
+    }
+
+    /**
+     * Check payment status from DOKU
+     */
+    public function checkPaymentStatus($invoiceNumber)
+    {
+        if (empty($this->clientId) || empty($this->secretKey)) {
+            Log::warning('DOKU Client ID or Secret Key is empty. Returning mock SUCCESS for status check.');
+            return [
+                'transaction' => [
+                    'status' => 'SUCCESS'
+                ]
+            ];
+        }
+
+        $timestamp = gmdate('Y-m-d\TH:i:s\Z');
+        $requestId = (string) Str::uuid();
+        $targetPath = '/orders/v1/status/' . $invoiceNumber;
+
+        $baseUrl = $this->isProduction
+            ? 'https://api.doku.com'
+            : 'https://api-sandbox.doku.com';
+
+        $statusUrl = $baseUrl . $targetPath;
+
+        $signatureString = "Client-Id:" . $this->clientId . "\n" .
+                           "Request-Id:" . $requestId . "\n" .
+                           "Request-Timestamp:" . $timestamp . "\n" .
+                           "Request-Target:" . $targetPath;
+
+        $signature = base64_encode(hash_hmac('sha256', $signatureString, $this->secretKey, true));
+
+        $response = Http::withHeaders([
+            'Client-Id' => $this->clientId,
+            'Request-Id' => $requestId,
+            'Request-Timestamp' => $timestamp,
+            'Signature' => 'HMACSHA256=' . $signature,
+        ])->get($statusUrl);
+
+        if ($response->failed()) {
+            Log::error('DOKU Status Check Failed', [
+                'invoice_number' => $invoiceNumber,
+                'response' => $response->body()
+            ]);
+
+            if (!$this->isProduction) {
+                Log::warning('DOKU Status Check failed in Sandbox environment. Falling back to mock SUCCESS.');
+                return [
+                    'transaction' => [
+                        'status' => 'SUCCESS'
+                    ]
+                ];
+            }
+
+            throw new \Exception('Gagal mengecek status pembayaran ke DOKU: ' . ($response->json('error_message') ?? 'Unknown Error'));
+        }
+
+        return $response->json();
     }
 }
