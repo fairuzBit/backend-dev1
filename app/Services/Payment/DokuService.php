@@ -64,7 +64,7 @@ class DokuService
             ],
             'payment' => [
                 'payment_due_date' => 60,
-                'payment_method_types' => ['QRIS'],
+                'payment_method_types' => ['VIRTUAL_ACCOUNT'],
             ],
             'customer' => [
                 'id' => 'LEARNER-' . $booking->learner->id,
