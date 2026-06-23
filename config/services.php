@@ -40,11 +40,11 @@ return [
         'anon_key' => env('SUPABASE_ANON_KEY'),
     ],
 
-    'midtrans' => [
-        'server_key' => env('MIDTRANS_SERVER_KEY'),
-        'client_key' => env('MIDTRANS_CLIENT_KEY'),
-        'is_production' => env('MIDTRANS_IS_PRODUCTION', false),
-        'merchant_id' => env('MIDTRANS_MERCHANT_ID'),
+    'doku' => [
+        'client_id' => env('DOKU_CLIENT_ID'),
+        'secret_key' => env('DOKU_SECRET_KEY'),
+        'is_production' => env('DOKU_IS_PRODUCTION', false),
+        'callback_url' => env('DOKU_CALLBACK_URL', 'http://localhost:5173/learner/bookings'),
     ],
 
 ];

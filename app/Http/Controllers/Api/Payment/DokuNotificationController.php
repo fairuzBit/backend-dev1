@@ -5,47 +5,53 @@ namespace App\Http\Controllers\Api\Payment;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Booking;
-use App\Services\Payment\MidtransService;
+use App\Services\Payment\DokuService;
 use App\Services\Admin\PaymentService;
 use Illuminate\Support\Facades\Log;
 
-class MidtransNotificationController extends Controller
+class DokuNotificationController extends Controller
 {
-    protected $midtransService;
+    protected $dokuService;
     protected $paymentService;
 
-    public function __construct(MidtransService $midtransService, PaymentService $paymentService)
+    public function __construct(DokuService $dokuService, PaymentService $paymentService)
     {
-        $this->midtransService = $midtransService;
+        $this->dokuService = $dokuService;
         $this->paymentService = $paymentService;
     }
 
     /**
-     * Handle incoming Midtrans payment webhook
+     * Handle incoming DOKU payment webhook
      */
     public function handle(Request $request)
     {
         $payload = $request->all();
-        Log::info('Midtrans Webhook Received', $payload);
+        $headers = $request->headers->all();
+        $rawBody = $request->getContent();
+
+        Log::info('DOKU Webhook Received', [
+            'headers' => $headers,
+            'payload' => $payload
+        ]);
 
         // 1. Verify Signature
-        if (!$this->midtransService->verifyNotificationSignature($payload)) {
-            Log::warning('Midtrans Webhook Invalid Signature', $payload);
+        if (!$this->dokuService->verifyNotificationSignature($headers, $rawBody)) {
+            Log::warning('DOKU Webhook Invalid Signature');
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid signature'
             ], 403);
         }
 
-        // 2. Parse Booking ID
-        $orderId = $payload['order_id'] ?? '';
-        $parts = explode('-', $orderId);
+        // 2. Parse Invoice & Booking ID
+        $invoiceNumber = $payload['order']['invoice_number'] ?? $payload['order']['invoiceNumber'] ?? '';
+        $parts = explode('-', $invoiceNumber);
         $bookingId = $parts[1] ?? null;
 
         if (!$bookingId) {
             return response()->json([
                 'success' => false,
-                'message' => 'Invalid order ID format'
+                'message' => 'Invalid invoice number format'
             ], 400);
         }
 
@@ -58,35 +64,17 @@ class MidtransNotificationController extends Controller
         }
 
         // 3. Process status
-        $transactionStatus = $payload['transaction_status'] ?? '';
-        $fraudStatus = $payload['fraud_status'] ?? '';
-        $paymentType = $payload['payment_type'] ?? '';
+        $transactionStatus = strtoupper($payload['transaction']['status'] ?? '');
+        $paymentType = $payload['channel']['name'] ?? 'doku';
 
-        Log::info("Processing Midtrans transaction status for Booking #{$bookingId}: status={$transactionStatus}, fraud={$fraudStatus}");
+        Log::info("Processing DOKU status for Booking #{$bookingId}: status={$transactionStatus}");
 
-        if ($transactionStatus === 'capture') {
-            if ($fraudStatus === 'challenge') {
-                $booking->update([
-                    'payment_status' => 'pending',
-                    'payment_method' => $paymentType
-                ]);
-            } else if ($fraudStatus === 'accept') {
-                $this->paymentService->approvePayment($bookingId);
-                $booking->update([
-                    'payment_method' => $paymentType
-                ]);
-            }
-        } else if ($transactionStatus === 'settlement') {
+        if ($transactionStatus === 'SUCCESS') {
             $this->paymentService->approvePayment($bookingId);
             $booking->update([
                 'payment_method' => $paymentType
             ]);
-        } else if (in_array($transactionStatus, ['pending'])) {
-            $booking->update([
-                'payment_status' => 'pending',
-                'payment_method' => $paymentType
-            ]);
-        } else if (in_array($transactionStatus, ['deny', 'expire', 'cancel'])) {
+        } elseif (in_array($transactionStatus, ['FAILED', 'EXPIRED', 'CANCELLED'])) {
             $booking->update([
                 'status' => 'cancelled',
                 'payment_status' => 'failed',

@@ -41,9 +41,8 @@ class DokuService
             $callbackUrl = rtrim($callbackBase, '/') . '/' . $booking->id;
 
             return [
-                'payment' => [
-                    'url' => $callbackUrl
-                ]
+                'url' => $callbackUrl,
+                'invoice_number' => 'MOCK-' . $booking->id . '-' . time()
             ];
         }
 
@@ -65,6 +64,7 @@ class DokuService
             ],
             'payment' => [
                 'payment_due_date' => 60,
+                'payment_method_types' => ['QRIS'],
             ],
             'customer' => [
                 'id' => 'LEARNER-' . $booking->learner->id,
@@ -111,9 +111,7 @@ class DokuService
                 }
 
                 return [
-                    'payment' => [
-                        'url' => $callbackUrl
-                    ],
+                    'url' => $callbackUrl,
                     'invoice_number' => $invoiceNumber
                 ];
             }
@@ -122,8 +120,10 @@ class DokuService
         }
 
         $resData = $response->json();
-        $resData['invoice_number'] = $invoiceNumber;
-        return $resData;
+        return [
+            'url' => $resData['response']['payment']['url'] ?? '',
+            'invoice_number' => $invoiceNumber
+        ];
     }
 
     /**

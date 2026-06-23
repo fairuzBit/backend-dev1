@@ -201,7 +201,7 @@ class BookingService
             $invoiceNumber = $dokuResponse['invoice_number'] ?? '';
             $booking->update([
                 'payment_method' => 'doku',
-                'payment_code' => $dokuResponse['payment']['url'] . ($invoiceNumber ? ':::' . $invoiceNumber : ''),
+                'payment_code' => ($dokuResponse['url'] ?? '') . ($invoiceNumber ? ':::' . $invoiceNumber : ''),
             ]);
         }
 
