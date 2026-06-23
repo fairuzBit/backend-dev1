@@ -43,7 +43,7 @@ class BookingService
                 'grand_total' => $grandTotal,
                 'status' => 'pending',
                 'payment_status' => 'unpaid',
-                'payment_expired_at' => now()->addMinutes(15)
+                'payment_expired_at' => now()->addHours(24)
             ]);
 
             // 2. Masukkan Rincian Slot dan Cek Jadwal Bentrok
@@ -137,18 +137,47 @@ class BookingService
      */
     public function getBookingDetail($learnerId, $bookingId)
     {
-        return Booking::with(['tutor.user', 'course', 'bookingSlots.masterSlot', 'review'])
+        $booking = Booking::with(['tutor.user', 'course', 'bookingSlots.masterSlot', 'review'])
             ->where('learner_id', $learnerId)
             ->where('id', $bookingId)
             ->firstOrFail();
+
+        if ($booking->payment_status === 'unpaid' && $booking->payment_method === 'doku' && $booking->payment_code) {
+            $invoiceNumber = str_contains($booking->payment_code, ':::')
+                ? explode(':::', $booking->payment_code)[1]
+                : null;
+
+            if ($invoiceNumber) {
+                try {
+                    $doku = new \App\Services\Payment\DokuService();
+                    $statusResponse = $doku->checkPaymentStatus($invoiceNumber);
+                    $transactionStatus = $statusResponse['transaction']['status'] ?? null;
+
+                    if ($transactionStatus === 'SUCCESS') {
+                        $paymentService = app(\App\Services\Admin\PaymentService::class);
+                        $booking = $paymentService->approvePayment($booking->id);
+                    } elseif ($transactionStatus === 'FAILED') {
+                        $booking->update([
+                            'status' => 'cancelled',
+                            'payment_status' => 'failed'
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Auto checking DOKU payment status failed: ' . $e->getMessage());
+                }
+            }
+        }
+
+        return $booking;
     }
 
     /**
-     * Memproses Pembayaran (Simulasi MVP)
+     * Memproses Pembayaran via DOKU
      */
     public function payBooking($learnerId, $bookingId, $paymentMethod)
     {
-        $booking = Booking::where('learner_id', $learnerId)
+        $booking = Booking::with(['learner', 'tutor.user', 'course'])
+            ->where('learner_id', $learnerId)
             ->where('id', $bookingId)
             ->where('payment_status', 'unpaid')
             ->firstOrFail();
@@ -158,16 +187,25 @@ class BookingService
             throw new Exception("Batas waktu pembayaran telah habis. Pesanan otomatis dibatalkan.");
         }
 
-        // Generate Nomor VA palsu (Contoh: 8878 + Nomor HP acak / Timestamp)
-        $paymentCode = '8878' . rand(10000000, 99999999);
+        if ($paymentMethod === 'cash') {
+            $booking->update([
+                'payment_method' => 'cash',
+                'payment_code' => 'CASH-' . $booking->id,
+                'status' => 'accepted',
+            ]);
+        } else {
+            // Generate DOKU Checkout URL
+            $doku = new \App\Services\Payment\DokuService();
+            $dokuResponse = $doku->createCheckoutUrl($booking);
 
-        $booking->update([
-            'payment_method' => $paymentMethod,
-            'payment_code' => $paymentCode
-            // Catatan: status pembayaran masih 'unpaid' sampai user transfer beneran
-        ]);
+            $invoiceNumber = $dokuResponse['invoice_number'] ?? '';
+            $booking->update([
+                'payment_method' => 'doku',
+                'payment_code' => ($dokuResponse['url'] ?? '') . ($invoiceNumber ? ':::' . $invoiceNumber : ''),
+            ]);
+        }
 
-        return $booking;
+        return $booking->load(['bookingSlots.masterSlot']);
     }
 
     /**

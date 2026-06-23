@@ -17,7 +17,7 @@ class TutorResource extends JsonResource
             'email' => $this->user->email,
             'nim' => $this->user->nim,
             'phone' => $this->user->phone,
-            'avatar' => $this->user->avatar ? (str_starts_with($this->user->avatar, 'data:image') ? $this->user->avatar : asset('storage/' . $this->user->avatar)) : null,
+            'avatar' => $this->user->avatar ? (str_starts_with($this->user->avatar, 'data:image') || str_starts_with($this->user->avatar, 'http') ? $this->user->avatar : asset('storage/' . $this->user->avatar)) : null,
             'bio' => $this->bio,
             'ipk' => $this->ipk,
             'is_active' => (bool) $this->is_active,

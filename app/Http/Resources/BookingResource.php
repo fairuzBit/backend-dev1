@@ -18,7 +18,9 @@ class BookingResource extends JsonResource
             'status' => $this->status,
             'payment_status' => $this->payment_status,
             'payment_method' => $this->payment_method,
-            'payment_code' => $this->payment_code,
+            'payment_code' => str_contains($this->payment_code ?? '', ':::') 
+                ? explode(':::', $this->payment_code)[0] 
+                : $this->payment_code,
             'payment_expired_at' => $this->payment_expired_at ? $this->payment_expired_at->toIso8601String() : null,
             
             // Relasi ke Tutor (Memanggil resource Tutor yang sudah Bos punya)
